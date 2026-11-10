@@ -1,0 +1,41 @@
+# D2 从头到尾测试：两条链各用自己写的二皇子书房 A 稿（第 1、2 份）出 GEN-D 终稿，和用户认可过成片的终稿一起三方盲评
+# 本脚本只备输入和任务说明；判卷打乱另跑 prep_e2e.py
+import shutil
+from pathlib import Path
+
+E = Path(__file__).resolve().parent
+SRC = E / 'D2' / '38-2D' / '输入'
+SHARED = ['EP38-38-2二皇子书房-剧本与场景.md', '04_资产索引_当前可调用.md']
+RULE = '写法：先用 write 建文件，只写标题一行；再一节一节用 append 往后追加，每次不超过约 1000 字（大约十几行），一节太长就拆成几次；失败了把那一段拆小再发，已经写进文件的不要重写。'
+T = E / 'briefs' / '任务'
+for ver, pdir, main in [
+    ('丁', 'prompts/丁/', '主命令词是 `D2命令词.md`，真源是同目录的 `06_生成视频.md`。'),
+    ('v5b', 'prompts/v5b/', '主命令词是 `14_D2命令词.md`，它开头列了要读的其他文件，都在同一目录；交稿前照它跑同目录的 `21_检查脚本.py`。'),
+]:
+    for n in (1, 2):
+        d = E / 'E2E' / f'{ver}_{n}' / '输入'
+        d.mkdir(parents=True, exist_ok=True)
+        for f in SHARED:
+            if not (d / f).exists():
+                shutil.copy2(SRC / f, d / f)
+        aver = 'v5' if ver == 'v5b' else ver
+        a = d / 'EP38-38-2二皇子书房-A稿.md'
+        if not a.exists():
+            shutil.copy2(E / 'out' / f'A4_{aver}_{n}.md', a)
+        text = f'''先完整读 `{E}/考生须知.md`，照它做。
+
+任务：为 EP38 38-2 二皇子书房的 GEN-D（10 秒，「天赐良机」那一段）写给视频模型的终稿（D2 三段式）。上游 A 稿已定，就是输入里的 `EP38-38-2二皇子书房-A稿.md`（骨架＋GEN-D 逐镜细稿），照它装配，不重新导演。只写 GEN-D 这一个 GEN。
+
+- 提示词目录：`{E}/{pdir}`。{main}
+- 输入目录：`{d}/`（A 稿、剧本与场景、资产索引）。
+- 输出文件：`{E}/out/E2E_{ver}_{n}.md`。{RULE}
+
+回报一行：输出路径、代码块 `wc -m` 字数、CUT 数、检查脚本最后一次的结果、大约用了多久。
+'''
+        (T / f'E2E_{ver}_{n}.md').write_text(text, encoding='utf-8')
+        print(T / f'E2E_{ver}_{n}.md', '<-', a.name, len(a.read_text(encoding="utf-8")), '字')
+real = Path('/Users/kk/Documents/AI 视频/软饭驸马_完整跨对话制作资料/00_项目生产包_当前有效/EP38-38-2二皇子书房-06最终-GEN-D-R01.md')
+pv = E.parent.parent / 'private' / 'E2E_真终稿_38-2D_GEN-D.md'
+if not pv.exists():
+    shutil.copy2(real, pv)
+print('real final ->', pv, len(pv.read_text(encoding='utf-8')), '字')

@@ -1,0 +1,103 @@
+# 生成写稿和判卷的任务说明文件，派子代理时只给一句"读这个文件照做"，避免派发时一次传太长的文字
+# 用法：python3 make_tasks.py 名1 名2 ...（名＝A4_丁_1、A5_v5_2、判卷_A2_1 这种）
+import sys
+from pathlib import Path
+
+E = Path(__file__).resolve().parent
+T = E / 'briefs' / '任务'
+T.mkdir(parents=True, exist_ok=True)
+
+SCENE = {
+    'A1': ('EP19 19-1 甲字号药库', 'GEN-D', '已确认的共创稿、资产索引、GEN 划分', False),
+    'A2': ('EP17 17-1 太医院正门', 'GEN-E', '已确认的共创稿、资产索引、GEN 划分', False),
+    'A3': ('EP26 26-1 演武场', 'GEN-C2', '已确认的共创稿、资产索引、GEN 划分', False),
+    'A4': ('EP38 38-2 二皇子书房', 'GEN-D', '剧本与场景、已确认的共创稿、资产索引、GEN 划分', False),
+    'A5': ('EP24 24-2 吞丹', 'GEN-B', '剧本分段、资产索引、GEN 划分', True),
+}
+KEY = {'A1': '考试_A_A1.md', 'A2': '考试_A_A2.md', 'A3': '考试_A_A3.md', 'A4': '考试_A_A4不退步.md', 'A5': '考试_A_A5.md'}
+WRITE_RULE = '写法：先用 write 建文件，只写标题一行；再一节一节用 append 往后追加，每次不超过约 1000 字（大约十几行），一节太长就拆成几次；失败了把那一段拆小再发，已经写进文件的不要重写。'
+
+
+GC = {'共创1': 'EP13 13-2 浴池场', '共创2': 'EP37 37-2 公主府书房场'}
+
+
+def gc_writer(q, ver, n):
+    if ver == '丁':
+        pdir, main = 'prompts/丁/', '主命令词是 `共创命令词.md`。'
+    else:
+        pdir, main = f'prompts/{ver}/', '主命令词是 `12_共创命令词.md`，它要求先读同目录的 `10_内核.md` 和本场用到的技能包。'
+    return f'''先完整读 `{E}/考生须知.md`，照它做。
+
+任务：为 {GC[q]}写一份导演共创稿。
+
+- 提示词目录：`{E}/{pdir}`。{main}
+- 输入目录：`{E}/共创/{q}/输入/`（剧本原文和资产索引）。
+- 输出文件：`{E}/out/{q}_{ver}_{n}.md`。{WRITE_RULE}
+
+回报一行：输出路径、`wc -m` 字数、大约用了多久。
+'''
+
+
+def writer(q, ver, n):
+    if q in GC:
+        return gc_writer(q, ver, n)
+    title, gen, inputs, no_gc = SCENE[q]
+    pre = ('输入里只有剧本分段，没有共创稿：先按命令词【前置分支】写出主荐，视为已确认，再往下写。' if no_gc else '')
+    if ver == '丁':
+        pdir, main = 'prompts/丁/', '主命令词是 `A命令词.md`，真源是同目录的 `05_设计镜头.md`。'
+    else:
+        pdir = f'prompts/{ver}/'
+        main = ('主命令词是 `13_A命令词.md`，它开头列了要读的其他文件，都在同一目录。'
+                + ('输入里没有共创稿，也就没有"本场用到"那一行' if no_gc else '输入的共创稿是旧格式，稿首没有"本场用到"那一行')
+                + '：照 `10_内核.md` §6 自己判断本场用哪几个技能包，在你的 A 稿稿首写明。')
+    return f'''先完整读 `{E}/考生须知.md`，照它做。
+
+任务：为 {title}写 A 稿。{pre}整场结构按命令词交付（人物关系锁＋九节导演骨架）；GEN 划分照输入里的 `GEN划分.md`，不改；逐镜细稿只写 {gen}，其余 GEN 写到骨架为止。
+
+- 提示词目录：`{E}/{pdir}`。{main}
+- 输入目录：`{E}/A/{q}/输入/`（{inputs}）。
+- 输出文件：`{E}/out/{q}_{ver}_{n}.md`。{WRITE_RULE}
+
+回报一行：输出路径、`wc -m` 字数、逐镜细稿写的是哪个 GEN、大约用了多久。
+'''
+
+
+def gc_judge(q, tag, setno):
+    return f'''先完整读 `{E}/briefs/盲评两方_v5.md`，照它做。
+
+题：{q}，{GC[q]}的导演共创稿（连续表现段和段内技法标注）。两份照的是同一份剧本原文。
+- 答案表：`{E}/keys/考试_共创_{q}.md`
+- 两份稿子：`{E}/judge/{tag}_{setno}/X.md` 和同目录的 `Y.md`
+- 输入目录：`{E}/共创/{q}/输入/`（剧本原文和资产索引；资产索引很长，只看本场用到的人物、场景、道具那几张卡）
+- 输出文件：`{E}/judged/{tag}_{setno}.md`。{WRITE_RULE}
+
+回报一行：X、Y 合计分，选哪份，各重犯几条。
+'''
+
+
+def judge(tag, setno):
+    q = tag[:-1] if tag.endswith(('b', 'c', 'd', 'e')) else tag  # A2b／A2c／A2d＝A2 的 R02／R03／R04 重考，答案表和输入同 A2
+    if q in GC:
+        return gc_judge(q, tag, setno)
+    title, gen, _, _ = SCENE[q]
+    return f'''先完整读 `{E}/briefs/盲评两方_v5.md`，照它做。
+
+题：{q}，{title}的 A 稿，两份的逐镜细稿写的都是 {gen}。
+- 答案表：`{E}/keys/{KEY[q]}`
+- 两份稿子：`{E}/judge/{tag}_{setno}/X.md` 和同目录的 `Y.md`
+- 输入目录：`{E}/A/{q}/输入/`（资产索引很长，只看本场用到的人物、场景、道具那几张卡）
+- 输出文件：`{E}/judged/{tag}_{setno}.md`。{WRITE_RULE}
+
+回报一行：X、Y 合计分，选哪份，各重犯几条。
+'''
+
+
+for name in sys.argv[1:]:
+    if name.startswith('判卷_'):
+        q, s = name[3:].split('_')
+        text = judge(q, s)
+    else:
+        q, ver, n = name.split('_')
+        text = writer(q, ver, n)
+    (T / f'{name}.md').write_text(text, encoding='utf-8')
+    print(T / f'{name}.md', len(text))
